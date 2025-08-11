@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wishy Washy Rune Lottery</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f4f4f9;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .info {
+      margin-bottom: 20px;
+    }
+    .info p {
+      margin: 10px 0;
+      font-size: 1.1em;
+    }
+    .controls {
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    #logs {
+      background: #ecf0f1;
+      padding: 10px;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Wishy Washy Rune Lottery</h1>
+  <div class="container">
+    <div class="info">
+      <p><strong>Send WISHYWASHYRUNE Runes to:</strong> <span id="address">Loading...</span></p>
+      <p><strong>Current Pot:</strong> <span id="pot">0</span> WISHY</p>
+      <p><strong>Last Winner:</strong> <span id="lastWinner">None</span></p>
+    </div>
+    <div class="controls">
+      <h3>Manual Controls</h3>
+      <button onclick="callApi('/init')">Init Rune Info</button>
+      <button onclick="callApi('/poll')">Poll for Deposits</button>
+      <button onclick="callApi('/check')">Check Block / Lottery</button>
+      <button onclick="callApi('/status')">Refresh Status</button>
+    </div>
+    <div>
+      <h3>Logs</h3>
+      <pre id="logs"></pre>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE_URL = 'https://wishyroulette.onrender.com';
+
+    function log(message) {
+      const logs = document.getElementById('logs');
+      logs.textContent += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+      logs.scrollTop = logs.scrollHeight;
+    }
+
+    async function callApi(endpoint) {
+      log(`Calling ${endpoint}...`);
+      try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        log(`Response from ${endpoint}: ${JSON.stringify(data, null, 2)}`);
+        if (endpoint === '/status' && data.success !== false) {
+          updateStatus(data);
+        }
+      } catch (error) {
+        log(`Error calling ${endpoint}: ${error.message}`);
+      }
+    }
+
+    function updateStatus(data) {
+      document.getElementById('address').textContent = data.address || 'Not available';
+      document.getElementById('pot').textContent = data.pot || '0';
+      document.getElementById('lastWinner').textContent = data.lastWinner || 'None';
+    }
+
+    // Fetch initial status on page load
+    window.onload = () => {
+      log('Fetching initial status...');
+      callApi('/status');
+    };
+  </script>
+</body>
+</html>
