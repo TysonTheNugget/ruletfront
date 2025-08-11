@@ -92,8 +92,13 @@
       try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
           method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include' // Include credentials if needed
         });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
         const data = await response.json();
         log(`Response from ${endpoint}: ${JSON.stringify(data, null, 2)}`);
         if (endpoint === '/status' && data.success !== false) {
@@ -101,6 +106,9 @@
         }
       } catch (error) {
         log(`Error calling ${endpoint}: ${error.message}`);
+        if (error.message.includes('Failed to fetch')) {
+          log('Possible CORS issue. Check if backend is responding with correct CORS headers.');
+        }
       }
     }
 
