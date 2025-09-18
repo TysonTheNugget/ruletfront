@@ -4,125 +4,371 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wishy Washy Rune Lottery</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
       background-color: #f4f4f9;
       color: #333;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     h1 {
-      text-align: center;
-      color: #2c3e50;
+      color: #4a90e2;
     }
     .container {
+      max-width: 800px;
+      width: 100%;
       background: white;
       padding: 20px;
       border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-    .info {
+    .status {
       margin-bottom: 20px;
     }
-    .info p {
+    .status p {
+      font-size: 18px;
       margin: 10px 0;
-      font-size: 1.1em;
     }
-    .controls {
+    .contributors {
+      margin-top: 20px;
+    }
+    .contributors ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    .contributors li {
+      background: #e9f5ff;
+      margin: 5px 0;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
       margin-bottom: 20px;
     }
     button {
-      padding: 10px 20px;
-      margin: 5px;
-      background-color: #3498db;
+      background-color: #4a90e2;
       color: white;
       border: none;
+      padding: 10px 20px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 1em;
+      font-size: 16px;
     }
     button:hover {
-      background-color: #2980b9;
+      background-color: #357bd8;
     }
-    #logs {
-      background: #ecf0f1;
+    .logs {
+      background: #f9f9f9;
+      border: 1px solid #ddd;
       padding: 10px;
-      border-radius: 4px;
-      max-height: 200px;
+      height: 200px;
       overflow-y: auto;
+      border-radius: 4px;
       font-family: monospace;
-      font-size: 0.9em;
+      white-space: pre-wrap;
+    }
+    .auto-refresh {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .auto-refresh label {
+      margin-right: 10px;
+    }
+    #pieChart {
+      max-height: 400px;
+    }
+    #rouletteContainer {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    #rouletteCanvas {
+      background: white;
+      border-radius: 50%;
+    }
+    #countdown {
+      font-size: 18px;
+      color: #e94a4a;
     }
   </style>
 </head>
 <body>
   <h1>Wishy Washy Rune Lottery</h1>
   <div class="container">
-    <div class="info">
-      <p><strong>Send WISHYWASHYRUNE Runes to:</strong> <span id="address">Loading...</span></p>
-      <p><strong>Current Pot:</strong> <span id="pot">0</span> WISHY</p>
-      <p><strong>Last Winner:</strong> <span id="lastWinner">None</span></p>
+    <div class="status">
+      <p>Send WISHYWASHYMACHINE Runes to: <span id="address">Loading...</span></p>
+      <p>Current Pot: <span id="pot">0</span> WISHY</p>
+      <p>Last Winner: <span id="lastWinner">None</span></p>
+      <p>Estimated Next Lottery Check: <span id="countdown">Calculating...</span></p>
+      <div class="contributors">
+        <h3>Contributors:</h3>
+        <ul id="contributorsList"></ul>
+      </div>
+      <canvas id="pieChart"></canvas>
     </div>
-    <div class="controls">
-      <h3>Manual Controls</h3>
-      <button onclick="callApi('/init')">Init Rune Info</button>
-      <button onclick="callApi('/poll')">Poll for Deposits</button>
-      <button onclick="callApi('/check')">Check Block / Lottery</button>
-      <button onclick="callApi('/status')">Refresh Status</button>
+    <div class="buttons">
+      <button onclick="initRune()">Init Rune Info</button>
+      <button onclick="pollDeposits()">Poll for Deposits</button>
+      <button onclick="checkBlock()">Check Block / Lottery</button>
+      <button onclick="refreshStatus()">Refresh Status</button>
+      <button onclick="resetState()">Reset State (Admin)</button>
     </div>
-    <div>
-      <h3>Logs</h3>
-      <pre id="logs"></pre>
+    <div class="auto-refresh">
+      <label><input type="checkbox" id="autoRefresh" checked> Auto-refresh status every 30 seconds</label>
     </div>
+    <div class="logs">
+      <pre id="logs">Logs will appear here...</pre>
+    </div>
+  </div>
+  <div id="rouletteContainer">
+    <canvas id="rouletteCanvas" width="400" height="400"></canvas>
   </div>
 
   <script>
-    const API_BASE_URL = 'https://wishyroulette.onrender.com';
+    const backendUrl = 'http://localhost:3000'; // Replace with your actual backend URL if deployed, e.g., 'https://your-backend.vercel.app'
+    let pieChart;
+    let lastBlockTime = 0;
+    let countdownInterval;
+    let currentContributors = {}; // Store full contributors data
 
-    function log(message) {
+    function logMessage(message) {
       const logs = document.getElementById('logs');
-      logs.textContent += `[${new Date().toLocaleTimeString()}] ${message}\n`;
+      logs.innerText += `\n${new Date().toLocaleTimeString()}: ${message}`;
       logs.scrollTop = logs.scrollHeight;
     }
 
-    async function callApi(endpoint) {
-      log(`Calling ${endpoint}...`);
+    async function fetchEndpoint(endpoint, params = {}) {
       try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include' // Include credentials if needed
-        });
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        const data = await response.json();
-        log(`Response from ${endpoint}: ${JSON.stringify(data, null, 2)}`);
-        if (endpoint === '/status' && data.success !== false) {
-          updateStatus(data);
-        }
-      } catch (error) {
-        log(`Error calling ${endpoint}: ${error.message}`);
-        if (error.message.includes('Failed to fetch')) {
-          log('Possible CORS issue. Check if backend is responding with correct CORS headers.');
-        }
+        const url = new URL(`${backendUrl}/${endpoint}`);
+        Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+        const res = await fetch(url);
+        const data = await res.json();
+        logMessage(`/${endpoint} response: ${JSON.stringify(data)}`);
+        return data;
+      } catch (e) {
+        logMessage(`Error in /${endpoint}: ${e.message}`);
+        return { success: false, error: e.message };
       }
     }
 
-    function updateStatus(data) {
-      document.getElementById('address').textContent = data.address || 'Not available';
-      document.getElementById('pot').textContent = data.pot || '0';
-      document.getElementById('lastWinner').textContent = data.lastWinner || 'None';
+    async function refreshStatus() {
+      const status = await fetchEndpoint('status');
+      if (status.address) {
+        document.getElementById('address').innerText = status.address;
+        document.getElementById('pot').innerText = status.pot;
+        document.getElementById('lastWinner').innerText = status.lastWinner || 'None';
+
+        currentContributors = status.contributors;
+
+        const list = document.getElementById('contributorsList');
+        list.innerHTML = '';
+        const contribData = [];
+        const labels = [];
+        const colors = [];
+        let total = 0n;
+        for (const [addr, amtStr] of Object.entries(status.contributors)) {
+          const amt = BigInt(amtStr);
+          total += amt;
+        }
+        for (const [addr, amtStr] of Object.entries(status.contributors)) {
+          const amt = BigInt(amtStr);
+          const li = document.createElement('li');
+          const percent = (Number(amt) / Number(total) * 100).toFixed(2);
+          li.innerText = `${addr}: ${amtStr} (${percent}%)`;
+          list.appendChild(li);
+          contribData.push(Number(amt));
+          labels.push(addr.slice(0, 6) + '...' + addr.slice(-4));
+          colors.push(`hsl(${Math.random() * 360}, 70%, 50%)`);
+        }
+
+        if (pieChart) pieChart.destroy();
+        pieChart = new Chart(document.getElementById('pieChart'), {
+          type: 'pie',
+          data: {
+            labels: labels,
+            datasets: [{ data: contribData, backgroundColor: colors }]
+          },
+          options: { responsive: true, plugins: { legend: { position: 'top' } } }
+        });
+      }
+
+      const blockTime = await fetchEndpoint('last-block-time');
+      if (blockTime.success) {
+        lastBlockTime = blockTime.timestamp * 1000; // to ms
+        updateCountdown();
+      }
     }
 
-    // Fetch initial status on page load
-    window.onload = () => {
-      log('Fetching initial status...');
-      callApi('/status');
-    };
+    function updateCountdown() {
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        const now = Date.now();
+        const estimatedNext = lastBlockTime + 600000; // 10 min
+        const remaining = estimatedNext - now;
+        if (remaining > 0) {
+          const min = Math.floor(remaining / 60000);
+          const sec = Math.floor((remaining % 60000) / 1000);
+          document.getElementById('countdown').innerText = `${min}m ${sec}s`;
+        } else {
+          document.getElementById('countdown').innerText = 'Any moment now...';
+          clearInterval(countdownInterval);
+        }
+      }, 1000);
+    }
+
+    async function initRune() {
+      await fetchEndpoint('init');
+      await refreshStatus();
+    }
+
+    async function pollDeposits() {
+      await fetchEndpoint('poll');
+      await refreshStatus();
+    }
+
+    async function checkBlock() {
+      // Assuming API_KEY is set, replace 'YOUR_API_KEY_HERE' with actual key or prompt user
+      const apiKey = prompt('Enter admin API key for check:'); // For security, in production use better auth
+      const result = await fetchEndpoint('check', { api_key: apiKey || '' });
+      await refreshStatus();
+      if (result.success && result.winner) {
+        await startRoulette(result.winner);
+      }
+    }
+
+    async function resetState() {
+      if (confirm('Are you sure?')) {
+        const apiKey = prompt('Enter admin API key for reset:');
+        await fetchEndpoint('reset', { api_key: apiKey || '' });
+        await refreshStatus();
+      }
+    }
+
+    async function startRoulette(winner) {
+      const container = document.getElementById('rouletteContainer');
+      container.style.display = 'flex';
+      const canvas = document.getElementById('rouletteCanvas');
+      const ctx = canvas.getContext('2d');
+      const radius = 200;
+      const center = radius;
+
+      // Use currentContributors
+      const contributors = Object.entries(currentContributors).map(([addr, amtStr]) => ({
+        label: addr,
+        value: Number(BigInt(amtStr)),
+        color: `hsl(${Math.random() * 360}, 70%, 50%)` // Random colors for roulette
+      }));
+      const total = contributors.reduce((sum, c) => sum + c.value, 0);
+
+      let cumAngles = [];
+      let startAngle = 0;
+      contributors.forEach(c => {
+        const angle = (c.value / total) * 2 * Math.PI;
+        cumAngles.push({ start: startAngle, end: startAngle + angle, label: c.label, color: c.color });
+        startAngle += angle;
+      });
+
+      // Find winner slice
+      const winnerSlice = cumAngles.find(s => s.label === winner);
+      if (!winnerSlice) {
+        container.style.display = 'none';
+        alert('Error: Winner not found in contributors.');
+        return;
+      }
+      const targetAngle = (winnerSlice.start + winnerSlice.end) / 2 + 2 * Math.PI; // Adjust for landing
+
+      let rotation = 0;
+      let speed = Math.PI / 30; // Slower initial speed
+      const deceleration = 0.99;
+      let spinning = true;
+
+      function drawWheel() {
+        ctx.clearRect(0, 0, 400, 400);
+        let currentAngle = rotation;
+        contributors.forEach(c => {
+          const angle = (c.value / total) * 2 * Math.PI;
+          ctx.beginPath();
+          ctx.arc(center, center, radius, currentAngle, currentAngle + angle);
+          ctx.lineTo(center, center);
+          ctx.fillStyle = c.color;
+          ctx.fill();
+          // Label (truncated)
+          const textAngle = currentAngle + angle / 2;
+          ctx.fillStyle = 'black';
+          ctx.font = '12px Arial';
+          const truncatedLabel = c.label.slice(0, 6) + '...' + c.label.slice(-4);
+          ctx.fillText(truncatedLabel, center + Math.cos(textAngle) * (radius / 1.5), center + Math.sin(textAngle) * (radius / 1.5));
+          currentAngle += angle;
+        });
+        // Arrow at top
+        ctx.beginPath();
+        ctx.moveTo(center, center - radius - 10);
+        ctx.lineTo(center - 10, center - radius + 10);
+        ctx.lineTo(center + 10, center - radius + 10);
+        ctx.fillStyle = 'red';
+        ctx.fill();
+      }
+
+      function animate() {
+        if (spinning) {
+          rotation = (rotation + speed) % (2 * Math.PI);
+          speed *= deceleration;
+          if (speed < 0.001) {
+            spinning = false;
+            // Fine-tune to land on winner (add extra rotations if needed)
+            const currentPointing = ( - rotation + Math.PI / 2) % (2 * Math.PI); // Adjust for arrow at top
+            const adjust = (targetAngle - currentPointing + 4 * 2 * Math.PI) % (2 * Math.PI);
+            rotation = (rotation + adjust) % (2 * Math.PI);
+            drawWheel();
+            setTimeout(() => {
+              container.style.display = 'none';
+              alert(`Winner: ${winner}! Payout sent.`);
+            }, 2000); // Pause to show
+            return;
+          }
+          drawWheel();
+          requestAnimationFrame(animate);
+        }
+      }
+
+      drawWheel();
+      animate();
+
+      // Click to close
+      container.onclick = () => container.style.display = 'none';
+    }
+
+    // Auto-refresh
+    let autoInterval;
+    function startAutoRefresh() {
+      if (document.getElementById('autoRefresh').checked) {
+        autoInterval = setInterval(refreshStatus, 30000);
+      } else {
+        clearInterval(autoInterval);
+      }
+    }
+
+    document.getElementById('autoRefresh').addEventListener('change', startAutoRefresh);
+
+    // Initial load
+    refreshStatus();
+    startAutoRefresh();
   </script>
 </body>
 </html>
