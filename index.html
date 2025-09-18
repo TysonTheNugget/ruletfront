@@ -43,7 +43,7 @@
     }
     async function updateStatus() {
       try {
-        const res = await fetch('https://wishyroulette.onrender.com/status');
+        const res = await fetch('/status');
         const data = await res.json();
         document.getElementById('address').textContent = data.address;
         document.getElementById('pot').textContent = `${data.pot} WISHY${data.pendingPot > 0 ? ` (+${data.pendingPot} pending)` : ''}`;
@@ -62,7 +62,7 @@
           li.textContent = `Player ${contrib.alias}: ${contrib.amount} WISHY (pending, ${contrib.sender.slice(0,8)}..., tx: ${txid.slice(0,8)}...)`;
           pendingList.appendChild(li);
         }
-        const timeRes = await fetch('https://wishyroulette.onrender.com/last-block-time');
+        const timeRes = await fetch('/last-block-time');
         const timeData = await timeRes.json();
         if (timeData.success) {
           const nextCheck = new Date(timeData.timestamp * 1000 + 10 * 60 * 1000).toLocaleString();
@@ -74,26 +74,43 @@
       }
     }
     async function init() { 
-      const res = await fetch('https://wishyroulette.onrender.com/init'); 
-      const data = await res.json(); 
-      log(JSON.stringify(data)); 
+      try {
+        const res = await fetch('/init'); 
+        const data = await res.json(); 
+        log(JSON.stringify(data)); 
+      } catch (e) {
+        log(`Init error: ${e.message}`);
+      }
     }
     async function poll() { 
-      const res = await fetch('https://wishyroulette.onrender.com/poll'); 
-      const data = await res.json(); 
-      log(JSON.stringify(data)); 
+      try {
+        const res = await fetch('/poll'); 
+        const data = await res.json(); 
+        log(JSON.stringify(data)); 
+        await updateStatus(); // Refresh UI after poll
+      } catch (e) {
+        log(`Poll error: ${e.message}`);
+      }
     }
     async function check() { 
-      const apiKey = prompt('API Key');
-      const res = await fetch(`https://wishyroulette.onrender.com/check?api_key=${apiKey}`); 
-      const data = await res.json(); 
-      log(JSON.stringify(data)); 
+      try {
+        const apiKey = prompt('API Key');
+        const res = await fetch(`/check?api_key=${apiKey}`); 
+        const data = await res.json(); 
+        log(JSON.stringify(data)); 
+      } catch (e) {
+        log(`Check error: ${e.message}`);
+      }
     }
     async function reset() { 
-      const apiKey = prompt('API Key');
-      const res = await fetch(`https://wishyroulette.onrender.com/reset?api_key=${apiKey}`); 
-      const data = await res.json(); 
-      log(JSON.stringify(data)); 
+      try {
+        const apiKey = prompt('API Key');
+        const res = await fetch(`/reset?api_key=${apiKey}`); 
+        const data = await res.json(); 
+        log(JSON.stringify(data)); 
+      } catch (e) {
+        log(`Reset error: ${e.message}`);
+      }
     }
     setInterval(() => { if (document.getElementById('auto-refresh').checked) updateStatus(); }, 10000);
     updateStatus();
