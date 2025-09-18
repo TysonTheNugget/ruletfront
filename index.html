@@ -44,6 +44,9 @@
     async function updateStatus() {
       try {
         const res = await fetch('/status');
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
         const data = await res.json();
         document.getElementById('address').textContent = data.address;
         document.getElementById('pot').textContent = `${data.pot} WISHY${data.pendingPot > 0 ? ` (+${data.pendingPot} pending)` : ''}`;
@@ -63,6 +66,9 @@
           pendingList.appendChild(li);
         }
         const timeRes = await fetch('/last-block-time');
+        if (!timeRes.ok) {
+          throw new Error(`HTTP error! status: ${timeRes.status}`);
+        }
         const timeData = await timeRes.json();
         if (timeData.success) {
           const nextCheck = new Date(timeData.timestamp * 1000 + 10 * 60 * 1000).toLocaleString();
@@ -76,6 +82,9 @@
     async function init() { 
       try {
         const res = await fetch('/init'); 
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
         const data = await res.json(); 
         log(JSON.stringify(data)); 
       } catch (e) {
@@ -85,6 +94,9 @@
     async function poll() { 
       try {
         const res = await fetch('/poll'); 
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
         const data = await res.json(); 
         log(JSON.stringify(data)); 
         await updateStatus(); // Refresh UI after poll
@@ -96,6 +108,9 @@
       try {
         const apiKey = prompt('API Key');
         const res = await fetch(`/check?api_key=${apiKey}`); 
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
         const data = await res.json(); 
         log(JSON.stringify(data)); 
       } catch (e) {
@@ -106,6 +121,9 @@
       try {
         const apiKey = prompt('API Key');
         const res = await fetch(`/reset?api_key=${apiKey}`); 
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
         const data = await res.json(); 
         log(JSON.stringify(data)); 
       } catch (e) {
