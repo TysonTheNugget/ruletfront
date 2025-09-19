@@ -156,7 +156,7 @@
       for (const [addr, amount] of Object.entries(data.contributors || {})) {
         const alias = btoa(addr + amount).slice(0, 6).toUpperCase();
         const li = document.createElement('li');
-        li.textContent = `${alias}: ${amount} WISHY (${addr.slice(0, 8)}...)`;
+        li.textContent = `${alias}: ${amount} WISHY (Address: ${addr.slice(0, 8)}...)`;
         confirmedList.appendChild(li);
       }
 
@@ -165,7 +165,7 @@
       for (const txid in data.pendingContributors || {}) {
         const { sender, amount, alias } = data.pendingContributors[txid];
         const li = document.createElement('li');
-        li.textContent = `${alias}: ${amount} WISHY (${sender.slice(0, 8)}...) [TxID: ${txid.slice(0, 8)}...]`;
+        li.textContent = `${alias}: ${amount} WISHY (Address: ${sender.slice(0, 8)}..., TxID: ${txid.slice(0, 8)}...)`;
         pendingList.appendChild(li);
       }
 
@@ -193,9 +193,8 @@
       log(data.success ? 'State reset successful' : `Reset failed: ${data.error}`);
     }
 
-    // Auto-refresh every 10 seconds
     setInterval(refresh, 10000);
-    refresh(); // Initial refresh
+    refresh();
   </script>
 </body>
 </html>
