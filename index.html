@@ -5,140 +5,197 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wishy Washy Rune Lottery</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f9f9f9; }
-    h1 { color: #333; text-align: center; }
-    p { font-size: 16px; margin: 10px 0; }
-    #address, #pot, #last-winner, #next-check { font-weight: bold; color: #007bff; }
-    #contributors, #pending-contributors { background: white; padding: 15px; border-radius: 8px; margin: 10px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    h3 { color: #555; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-    ul { list-style-type: none; padding: 0; }
-    li { background: #f8f9fa; margin: 5px 0; padding: 8px; border-radius: 4px; border-left: 4px solid #007bff; }
-    button { background: #007bff; color: white; border: none; padding: 10px 15px; margin: 5px; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #0056b3; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
-    #logs { white-space: pre-wrap; background: #333; color: #0f0; padding: 10px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; }
-    #auto-refresh { margin-right: 10px; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .box {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      min-height: 200px;
+    }
+    .box h2 {
+      margin-top: 0;
+      color: #2c3e50;
+    }
+    .box p, .box ul {
+      margin: 10px 0;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      padding: 5px 0;
+    }
+    .admin-controls {
+      margin-top: 20px;
+      text-align: center;
+    }
+    .admin-controls button {
+      margin: 5px;
+      padding: 10px 20px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .admin-controls button:hover {
+      background-color: #2980b9;
+    }
+    #logs {
+      margin-top: 20px;
+      padding: 10px;
+      background: #eee;
+      border-radius: 5px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
   </style>
 </head>
 <body>
   <h1>🎰 Wishy Washy Rune Lottery</h1>
-  <p>Send WISHYWASHYMACHINE Runes to: <span id="address">Loading...</span></p>
-  <p>Current Pot: <span id="pot">0 WISHY</span></p>
-  <p>Last Winner: <span id="last-winner">None</span></p>
-  <p>Estimated Next Lottery Check: <span id="next-check">Calculating...</span></p>
-  <div id="contributors">
-    <h3>Confirmed Entries:</h3>
-    <ul id="contributors-list"></ul>
+  <div class="container">
+    <div class="box">
+      <h2>1. Send Runes</h2>
+      <p><strong>Send WISHYWASHYMACHINE Runes to:</strong></p>
+      <p id="address">Loading...</p>
+      <p><strong>Current Pot:</strong> <span id="pot">0</span> WISHY</p>
+      <p><strong>Last Winner:</strong> <span id="last-winner">None</span></p>
+      <p><strong>Estimated Next Lottery Check:</strong> <span id="next-check">Calculating...</span></p>
+    </div>
+    <div class="box">
+      <h2>2. Confirmed Contestants (Current Game)</h2>
+      <ul id="confirmed-entries"></ul>
+    </div>
+    <div class="box">
+      <h2>3. Pending Entries (Next Game)</h2>
+      <ul id="pending-entries"></ul>
+    </div>
+    <div class="box">
+      <h2>4. Past Games</h2>
+      <ul id="past-games"></ul>
+    </div>
   </div>
-  <div id="pending-contributors">
-    <h3>Pending Entries (Unconfirmed):</h3>
-    <ul id="pending-list"></ul>
-  </div>
-  <div style="text-align: center;">
+  <div class="admin-controls">
     <button onclick="init()">Init Rune Info</button>
     <button onclick="poll()">Poll for Deposits</button>
     <button onclick="check()">Check Block / Lottery</button>
-    <button onclick="updateStatus()">Refresh Status</button>
+    <button onclick="refresh()">Refresh Status</button>
     <button onclick="reset()">Reset State (Admin)</button>
   </div>
-  <p style="text-align: center;"><input type="checkbox" id="auto-refresh" checked> Auto-refresh status every 10 seconds</p>
   <div id="logs">Logs will appear here...</div>
-  <script>
-    const API_BASE = 'https://wishyroulette.onrender.com'; // Full backend URL for cross-origin calls
 
-    async function log(message) {
+  <script>
+    const apiUrl = 'https://wishyroulette.onrender.com';
+    const adminApiKey = prompt('Enter Admin API Key (leave blank if not admin):') || '';
+
+    function log(message) {
       const logs = document.getElementById('logs');
-      logs.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+      logs.innerHTML += `<p>${new Date().toLocaleString()}: ${message}</p>`;
       logs.scrollTop = logs.scrollHeight;
     }
 
-    async function apiFetch(endpoint, options = {}) {
-      const url = `${API_BASE}${endpoint}`;
-      log(`Fetching ${url}`);
-      const res = await fetch(url, options);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    async function fetchWithError(url, options = {}) {
+      try {
+        const res = await fetch(url, options);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        return await res.json();
+      } catch (e) {
+        log(`Error: ${e.message}`);
+        throw e;
       }
-      return await res.json();
     }
 
-    async function updateStatus() {
-      try {
-        const data = await apiFetch('/status');
-        document.getElementById('address').textContent = data.address;
-        document.getElementById('pot').innerHTML = `${data.pot} WISHY${data.pendingPot > 0 ? ` <small>(+${data.pendingPot} pending)</small>` : ''}`;
-        document.getElementById('last-winner').textContent = data.lastWinner || 'None';
-        const contribList = document.getElementById('contributors-list');
-        contribList.innerHTML = '';
-        for (const [addr, amt] of Object.entries(data.contributors || {})) {
+    async function init() {
+      log('Initializing rune info...');
+      const data = await fetchWithError(`${apiUrl}/init`);
+      log(data.success ? 'Initialization successful' : `Init failed: ${data.error}`);
+    }
+
+    async function poll() {
+      log('Polling for deposits...');
+      const data = await fetchWithError(`${apiUrl}/poll`);
+      log(data.success ? `Polled: ${data.newContributions} new contributions` : `Poll failed: ${data.error}`);
+    }
+
+    async function check() {
+      log('Checking block for lottery...');
+      const data = await fetchWithError(`${apiUrl}/check?api_key=${adminApiKey}`);
+      log(data.success ? (data.winner ? `Winner: ${data.winner}` : data.message) : `Check failed: ${data.error}`);
+    }
+
+    async function refresh() {
+      log('Refreshing status...');
+      const data = await fetchWithError(`${apiUrl}/status`);
+      if (data.success === false) {
+        log(`Status fetch failed: ${data.error}`);
+        return;
+      }
+      document.getElementById('address').textContent = data.address || 'Unknown';
+      document.getElementById('pot').textContent = data.pot || '0';
+      document.getElementById('last-winner').textContent = data.lastWinner || 'None';
+
+      const confirmedList = document.getElementById('confirmed-entries');
+      confirmedList.innerHTML = '';
+      for (const [addr, amount] of Object.entries(data.contributors || {})) {
+        const alias = btoa(addr + amount).slice(0, 6).toUpperCase();
+        const li = document.createElement('li');
+        li.textContent = `${alias}: ${amount} WISHY (${addr.slice(0, 8)}...)`;
+        confirmedList.appendChild(li);
+      }
+
+      const pendingList = document.getElementById('pending-entries');
+      pendingList.innerHTML = '';
+      for (const txid in data.pendingContributors || {}) {
+        const { sender, amount, alias } = data.pendingContributors[txid];
+        const li = document.createElement('li');
+        li.textContent = `${alias}: ${amount} WISHY (${sender.slice(0, 8)}...) [TxID: ${txid.slice(0, 8)}...]`;
+        pendingList.appendChild(li);
+      }
+
+      const lastBlockTime = await fetchWithError(`${apiUrl}/last-block-time`);
+      if (lastBlockTime.success) {
+        const nextCheck = new Date(lastBlockTime.timestamp * 1000 + 10 * 60 * 1000);
+        document.getElementById('next-check').textContent = nextCheck.toLocaleString();
+      }
+
+      const history = await fetchWithError(`${apiUrl}/history`);
+      const pastGamesList = document.getElementById('past-games');
+      pastGamesList.innerHTML = '';
+      if (history.success && history.games) {
+        history.games.forEach(game => {
           const li = document.createElement('li');
-          li.innerHTML = `Player <strong>${btoa(addr + amt).slice(0,6).toUpperCase()}</strong>: ${amt} WISHY<br><small>(${addr.slice(0,8)}...)</small>`;
-          contribList.appendChild(li);
-        }
-        const pendingList = document.getElementById('pending-list');
-        pendingList.innerHTML = '';
-        for (const [txid, contrib] of Object.entries(data.pendingContributors || {})) {
-          const li = document.createElement('li');
-          li.innerHTML = `Player <strong>${contrib.alias}</strong>: ${contrib.amount} WISHY (pending)<br><small>(${contrib.sender.slice(0,8)}..., tx: ${txid.slice(0,8)}...)</small>`;
-          pendingList.appendChild(li);
-        }
-        const timeData = await apiFetch('/last-block-time');
-        if (timeData.success) {
-          const nextCheck = new Date(timeData.timestamp * 1000 + 10 * 60 * 1000).toLocaleString();
-          document.getElementById('next-check').textContent = nextCheck;
-        }
-        log('Status updated successfully');
-      } catch (e) {
-        log(`Status update error: ${e.message}`);
+          li.textContent = `Winner: ${game.winner.slice(0, 8)}..., Amount: ${game.amount} WISHY, Time: ${new Date(game.timestamp).toLocaleString()}`;
+          pastGamesList.appendChild(li);
+        });
       }
     }
 
-    async function init() { 
-      try {
-        const data = await apiFetch('/init'); 
-        log('Init: ' + JSON.stringify(data)); 
-      } catch (e) {
-        log(`Init error: ${e.message}`);
-      }
+    async function reset() {
+      log('Resetting state...');
+      const data = await fetchWithError(`${apiUrl}/reset?api_key=${adminApiKey}`);
+      log(data.success ? 'State reset successful' : `Reset failed: ${data.error}`);
     }
 
-    async function poll() { 
-      try {
-        const data = await apiFetch('/poll'); 
-        log('Poll: ' + JSON.stringify(data)); 
-        await updateStatus(); // Refresh UI after poll
-      } catch (e) {
-        log(`Poll error: ${e.message}`);
-      }
-    }
-
-    async function check() { 
-      try {
-        const apiKey = prompt('Enter API Key:');
-        if (!apiKey) return;
-        const data = await apiFetch(`/check?api_key=${encodeURIComponent(apiKey)}`); 
-        log('Check: ' + JSON.stringify(data)); 
-      } catch (e) {
-        log(`Check error: ${e.message}`);
-      }
-    }
-
-    async function reset() { 
-      try {
-        const apiKey = prompt('Enter API Key:');
-        if (!apiKey) return;
-        const data = await apiFetch(`/reset?api_key=${encodeURIComponent(apiKey)}`); 
-        log('Reset: ' + JSON.stringify(data)); 
-      } catch (e) {
-        log(`Reset error: ${e.message}`);
-      }
-    }
-
-    // Auto-refresh
-    setInterval(() => { 
-      if (document.getElementById('auto-refresh').checked) updateStatus(); 
-    }, 10000);
-    updateStatus(); // Initial load
+    // Auto-refresh every 10 seconds
+    setInterval(refresh, 10000);
+    refresh(); // Initial refresh
   </script>
 </body>
 </html>
