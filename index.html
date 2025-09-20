@@ -12,11 +12,12 @@
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background-color: #e0e0e0; }
-    .buttons { display: flex; gap: 10px; margin: 20px 0; }
+    .buttons { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
     button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
     button:hover { background: #0056b3; }
     #logs { white-space: pre-wrap; font-family: monospace; background: #f8f8f8; padding: 10px; height: 200px; overflow-y: auto; border: 1px solid #ddd; }
     .error { color: red; font-weight: bold; }
+    .loading { color: #666; }
   </style>
 </head>
 <body>
@@ -25,10 +26,10 @@
   <div class="section">
     <h2>1. Send Runes</h2>
     <p>Send WISHYWASHYMACHINE Runes to:</p>
-    <p id="address" class="address">Loading...</p>
+    <p id="address" class="address loading">Loading...</p>
     <p id="pot">Current Pot: 0 WISHY</p>
     <p id="last-winner">Last Winner: None</p>
-    <p id="next-lottery">Estimated Next Lottery Check: Calculating...</p>
+    <p id="next-lottery" class="loading">Estimated Next Lottery Check: Calculating...</p>
     <p id="balance-error" class="error" style="display: none;"></p>
   </div>
 
@@ -91,23 +92,27 @@
 
   <script>
     const apiUrl = 'https://wishyroulette.onrender.com';
+    const networkType = 'mainnet'; // Updated to mainnet as per logs
     let lastLogTime = 0;
 
     async function fetchWithLogs(url) {
       const now = Date.now();
       if (now - lastLogTime > 1000) {
-        log(`Fetching ${url}`);
+        log(`Fetching ${url.replace(apiUrl, '')}`);
         lastLogTime = now;
       }
       try {
         const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`${response.status} ${response.statusText}`);
+        }
         const data = await response.json();
-        if (!response.ok || !data.success) {
-          log(`Error fetching ${url}: ${data.error || response.statusText}`);
+        if (!data.success) {
+          throw new Error(data.error || 'Unknown error');
         }
         return data;
       } catch (e) {
-        log(`Fetch error for ${url}: ${e.message}`);
+        log(`Error fetching ${url.replace(apiUrl, '')}: ${e.message}`);
         return { success: false, error: e.message };
       }
     }
@@ -123,6 +128,8 @@
       const data = await fetchWithLogs(`${apiUrl}/init`);
       if (data.success) {
         log(`Rune ID: ${data.runeId}, Decimals: ${data.decimals}`);
+      } else {
+        log(`Init failed: ${data.error}`);
       }
       await refresh();
     }
@@ -131,7 +138,9 @@
       log('Polling for deposits...');
       const data = await fetchWithLogs(`${apiUrl}/poll`);
       if (data.success) {
-        log(`Poll completed`);
+        log(`Poll completed: ${data.newContributions || 0} new contributions, ${data.newWithdrawals || 0} withdrawals`);
+      } else {
+        log(`Poll failed: ${data.error}`);
       }
       await refresh();
     }
@@ -145,9 +154,11 @@
       }
       const data = await fetchWithLogs(`${apiUrl}/check?api_key=${encodeURIComponent(apiKey)}`);
       if (data.success && data.winner) {
-        log(`Winner: ${data.winner}`);
+        log(`🎉 Winner: ${data.winner.slice(0, 8)}...`);
       } else if (data.success) {
         log(data.message || 'No action taken');
+      } else {
+        log(`Check failed: ${data.error}`);
       }
       await refresh();
     }
@@ -155,24 +166,33 @@
     async function refresh() {
       log('Refreshing status...');
       const status = await fetchWithLogs(`${apiUrl}/status`);
-      if (status.success) {
-        document.getElementById('address').textContent = status.address;
-        document.getElementById('pot').textContent = `Current Pot: ${status.pot} WISHY`;
+      if (status) {  // Allow partial data even if not success
+        document.getElementById('address').textContent = status.address || 'Unknown';
+        document.getElementById('pot').textContent = `Current Pot: ${status.pot || 0} WISHY`;
         document.getElementById('last-winner').textContent = `Last Winner: ${status.lastWinner || 'None'}`;
         document.getElementById('balance-error').style.display = status.balanceError ? 'block' : 'none';
         document.getElementById('balance-error').textContent = status.balanceError || '';
-        updateTable('contestants', status.contributors, ['address', 'amount']);
-        updateTable('pending', status.pendingContributors, ['alias', 'sender', 'amount', 'status']);
+        updateTable('contestants', status.contributors || {}, ['address', 'amount']);
+        updateTable('pending', status.pendingContributors || {}, ['alias', 'sender', 'amount', 'status']);
         updateContestantsSection(status.hasOpenGame);
+      } else {
+        log(`Status fetch failed`);
       }
+
       const history = await fetchWithLogs(`${apiUrl}/history`);
-      if (history.success) {
-        updateTable('history', history.games, ['winner', 'amount', 'timestamp', 'txid'], true);
+      if (history && history.success) {
+        updateTable('history', history.games || [], ['winner', 'amount', 'timestamp', 'txid'], true);
+      } else {
+        log(`History fetch failed: ${history ? history.error : 'Unknown'}`);
       }
+
       const blockTime = await fetchWithLogs(`${apiUrl}/last-block-time`);
-      if (blockTime.success) {
+      if (blockTime && blockTime.success) {
         const nextTime = new Date((blockTime.timestamp + 600) * 1000).toLocaleString();
         document.getElementById('next-lottery').textContent = `Estimated Next Lottery Check: ${nextTime}`;
+      } else {
+        document.getElementById('next-lottery').textContent = 'Estimated Next Lottery Check: API Error';
+        log(`Block time fetch failed: ${blockTime ? blockTime.error : 'Unknown'}`);
       }
     }
 
@@ -190,25 +210,27 @@
         const cell = row.insertCell();
         cell.colSpan = fields.length;
         cell.textContent = 'No data';
+        cell.className = 'loading';
         return;
       }
       entries.forEach(item => {
         const row = tbody.insertRow();
         fields.forEach(field => {
           const cell = row.insertCell();
-          if (field === 'timestamp' && formatTime) {
-            cell.textContent = new Date(item[field]).toLocaleString();
-          } else if (field === 'txid' && item[field]) {
+          let value = item[field];
+          if (field === 'timestamp' && formatTime && value) {
+            cell.textContent = new Date(value).toLocaleString();
+          } else if (field === 'txid' && value) {
             const a = document.createElement('a');
-            a.href = `https://mempool.space/${networkType === 'testnet' ? 'testnet/' : ''}tx/${item[field]}`;
-            a.textContent = item[field].slice(0, 8) + '...';
+            a.href = `https://mempool.space/${networkType === 'testnet' ? 'testnet/' : ''}tx/${value}`;
+            a.textContent = value.slice(0, 8) + '...';
             a.target = '_blank';
             cell.appendChild(a);
           } else if (field === 'address' || field === 'sender' || field === 'winner') {
-            cell.textContent = item[field].slice(0, 8) + '...';
-            cell.title = item[field];
+            cell.textContent = value ? value.slice(0, 8) + '...' : '';
+            if (value) cell.title = value;
           } else {
-            cell.textContent = item[field] || '';
+            cell.textContent = value || '';
           }
         });
       });
@@ -224,11 +246,20 @@
       const data = await fetchWithLogs(`${apiUrl}/reset?api_key=${encodeURIComponent(apiKey)}`);
       if (data.success) {
         log('State reset successfully');
+      } else {
+        log(`Reset failed: ${data.error}`);
       }
       await refresh();
     }
 
-    window.onload = init;
+    // Auto-refresh every 30 seconds
+    setInterval(refresh, 30000);
+
+    // Initial load
+    window.onload = () => {
+      log('App loaded');
+      setTimeout(init, 1000);  // Delay initial init to allow server warmup
+    };
   </script>
 </body>
 </html>
