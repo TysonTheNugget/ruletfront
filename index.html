@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🎰 Wishy Washy Rune Lottery - Mainnet</title>
+  <title>🎰 Wishy Washy Rune Lottery</title>
   <style>
     body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
     h1 { text-align: center; color: #333; }
@@ -21,11 +21,11 @@
   </style>
 </head>
 <body>
-  <h1>🎰 Wishy Washy Rune Lottery (Mainnet)</h1>
+  <h1>🎰 Wishy Washy Rune Lottery</h1>
 
   <div class="section">
     <h2>1. Send Runes</h2>
-    <p>Send <strong>WISHYWASHYMACHINE</strong> Runes to (mainnet only):</p>
+    <p>Send WISHY•WASHY•MACHINE Runes to:</p>
     <p id="address" class="address">Loading...</p>
     <p id="pot">Current Pot: 0 WISHY</p>
     <p id="last-winner">Last Winner: None</p>
@@ -42,7 +42,7 @@
   </div>
 
   <div class="section">
-    <h2>3. Pending Entries</h2>
+    <h2>3. Pending Entries (Next Game)</h2>
     <table id="pending">
       <thead><tr><th>Alias</th><th>Address</th><th>Amount (WISHY)</th><th>Status</th></tr></thead>
       <tbody></tbody>
@@ -58,134 +58,158 @@
   </div>
 
   <div class="buttons">
-    <button onclick="initApp()">Init</button>
-    <button onclick="poll()">Poll Deposits</button>
-    <button onclick="checkLottery()">Check Lottery</button>
-    <button onclick="refresh()">Refresh</button>
-    <button onclick="resetState()">Reset (Admin)</button>
+    <button onclick="initApp()">Init Rune Info</button>
+    <button onclick="poll()">Poll for Deposits</button>
+    <button onclick="checkLottery()">Check Block / Lottery</button>
+    <button onclick="refresh()">Refresh Status</button>
+    <button onclick="resetState()">Reset State (Admin)</button>
   </div>
 
   <div class="section">
     <h2>Logs</h2>
-    <div id="logs">Initializing...</div>
+    <div id="logs">Logs will appear here...</div>
   </div>
 
   <script>
-    const apiUrl = 'https://wishyroulette.onrender.com'; // Render backend
+    const apiUrl = 'https://wishyroulette.onrender.com';
     let lastLogTime = 0;
 
     async function fetchWithLogs(endpoint) {
       const url = `${apiUrl}${endpoint}`;
       const now = Date.now();
-      if (now - lastLogTime > 5000) { // Log less frequently
-        log(`Fetching ${endpoint}...`);
+      if (now - lastLogTime > 1000) {
+        log(`Fetching ${endpoint}`);
         lastLogTime = now;
       }
       try {
-        const res = await fetch(url);
-        const data = await res.json();
-        if (!res.ok || !data.success) log(`Error ${endpoint}: ${data.error || res.statusText}`);
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          log(`Error fetching ${endpoint}: ${data.error || response.statusText}`);
+        }
         return data;
       } catch (e) {
-        log(`Fetch error ${endpoint}: ${e.message}`);
+        log(`Fetch error for ${endpoint}: ${e.message}`);
         return { success: false, error: e.message };
       }
     }
 
-    function log(msg) {
-      document.getElementById('logs').innerHTML += `${new Date().toLocaleTimeString()}: ${msg}\n`;
-      document.getElementById('logs').scrollTop = document.getElementById('logs').scrollHeight;
+    function log(message) {
+      const logs = document.getElementById('logs');
+      logs.innerHTML += `${new Date().toLocaleTimeString()}: ${message}\n`;
+      logs.scrollTop = logs.scrollHeight;
     }
 
     async function initApp() {
-      log('Initializing mainnet...');
+      log('Initializing...');
       const data = await fetchWithLogs('/init');
-      if (data.success) log(`Rune ID: ${data.runeId}, Decimals: ${data.decimals}`);
+      if (data.success) {
+        log(`Rune ID: ${data.runeId}, Decimals: ${data.decimals}`);
+      }
       await refresh();
     }
 
     async function poll() {
-      log('Polling...');
+      log('Polling for deposits...');
       const data = await fetchWithLogs('/poll');
-      if (data.success) log(`${data.newContributions} new contribs, ${data.newWithdrawals} withdrawals`);
+      if (data.success) {
+        log(`New contributions: ${data.newContributions}, New withdrawals: ${data.newWithdrawals}`);
+      }
       await refresh();
     }
 
     async function checkLottery() {
-      const apiKey = prompt('Admin API Key:');
-      if (!apiKey) return log('Key required');
-      const data = await fetchWithLogs(`/check?api_key=${encodeURIComponent(apiKey)}`);
-      if (data.success && data.winner) log(`Winner: ${data.winner.slice(0, 8)}...`);
-      else if (data.success) log(data.message || 'No action');
-      else log(`Check failed: ${data.error}`);
+      log('Checking block / lottery...');
+      const apiKey = prompt('Enter admin API key:');
+      if (!apiKey) {
+        log('Admin API key required');
+        return;
+      }
+      const data = await fetchWithLogs('/check?api_key=' + encodeURIComponent(apiKey));
+      if (data.success && data.winner) {
+        log(`Winner: ${data.winner}`);
+      } else if (data.success) {
+        log(data.message || 'No action taken');
+      }
       await refresh();
     }
 
     async function refresh() {
+      log('Refreshing status...');
       const status = await fetchWithLogs('/status');
-      if (status.success !== false) {
+      if (status.success) {
         document.getElementById('address').textContent = status.address;
         document.getElementById('pot').textContent = `Current Pot: ${status.pot} WISHY`;
-        document.getElementById('last-winner').textContent = `Last Winner: ${status.lastWinner ? status.lastWinner.slice(0, 8) + '...' : 'None'}`;
+        document.getElementById('last-winner').textContent = `Last Winner: ${status.lastWinner || 'None'}`;
         document.getElementById('balance-error').style.display = status.balanceError ? 'block' : 'none';
         document.getElementById('balance-error').textContent = status.balanceError || '';
-        updateTable('contestants', status.contributors || {}, ['alias' in status.contributors ? 'alias' : 'address', 'amount']);
-        updateTable('pending', status.pendingContributors || {}, ['alias', 'sender', 'amount', 'status']);
-        document.getElementById('contestants-section').style.display = status.hasOpenGame ? 'block' : 'none';
+        updateTable('contestants', status.contributors, ['address', 'amount']);
+        updateTable('pending', status.pendingContributors, ['alias', 'sender', 'amount', 'status']);
+        updateContestantsSection(status.hasOpenGame);
       }
-
-      const historyData = await fetchWithLogs('/history');
-      if (historyData.success) updateTable('history', historyData.games || [], ['winner', 'amount', 'timestamp', 'txid'], true);
-
+      const history = await fetchWithLogs('/history');
+      if (history.success) {
+        updateTable('history', history.games, ['winner', 'amount', 'timestamp', 'txid'], true);
+      }
       const blockTime = await fetchWithLogs('/last-block-time');
       if (blockTime.success) {
-        const nextEst = new Date((blockTime.timestamp + 600) * 1000).toLocaleString(); // ~10 min avg block
-        document.getElementById('next-lottery').textContent = `Estimated Next Check: ${nextEst}`;
+        const nextTime = new Date((blockTime.timestamp + 600) * 1000).toLocaleString();
+        document.getElementById('next-lottery').textContent = `Estimated Next Lottery Check: ${nextTime}`;
       }
     }
 
-    function updateTable(id, dataObj, fields, formatTime = false) {
-      const tbody = document.getElementById(id).querySelector('tbody');
+    function updateContestantsSection(hasOpenGame) {
+      document.getElementById('contestants-section').style.display = hasOpenGame ? 'block' : 'none';
+    }
+
+    function updateTable(tableId, data, fields, formatTime = false) {
+      const tbody = document.getElementById(tableId).getElementsByTagName('tbody')[0];
       tbody.innerHTML = '';
-      const entries = Object.values(dataObj);
+      const entries = Object.values(data);
       if (entries.length === 0) {
         const row = tbody.insertRow();
         const cell = row.insertCell();
         cell.colSpan = fields.length;
-        cell.className = 'no-data';
-        cell.textContent = 'No data (or API issue - check logs)';
+        cell.textContent = 'No data';
         return;
       }
       entries.forEach(item => {
         const row = tbody.insertRow();
         fields.forEach(field => {
           const cell = row.insertCell();
-          let val = item[field] || '';
-          if (field === 'timestamp' && formatTime) val = val ? new Date(val).toLocaleString() : 'N/A';
-          else if (field === 'txid' && val) {
+          if (field === 'timestamp' && formatTime) {
+            cell.textContent = new Date(item[field]).toLocaleString();
+          } else if (field === 'txid' && item[field]) {
             const a = document.createElement('a');
-            a.href = `https://mempool.space/tx/${val}`;
-            a.textContent = val.slice(0, 8) + '...';
+            a.href = `https://mempool.space/tx/${item[field]}`;
+            a.textContent = item[field].slice(0, 8) + '...';
             a.target = '_blank';
             cell.appendChild(a);
-            return;
-          } else if (['address', 'sender', 'winner'].includes(field)) val = val ? val.slice(0, 8) + '...' : '';
-          cell.textContent = val;
-          if (['address', 'sender', 'winner'].includes(field)) cell.title = item[field] || '';
+          } else if (field === 'address' || field === 'sender' || field === 'winner') {
+            cell.textContent = item[field].slice(0, 8) + '...';
+            cell.title = item[field];
+          } else {
+            cell.textContent = item[field] || '';
+          }
         });
       });
     }
 
     async function resetState() {
-      const apiKey = prompt('Admin API Key:');
-      if (!apiKey) return log('Key required');
-      const data = await fetchWithLogs(`/reset?api_key=${encodeURIComponent(apiKey)}`);
-      log(data.success ? 'Reset OK' : `Reset failed: ${data.error}`);
+      log('Resetting state...');
+      const apiKey = prompt('Enter admin API key:');
+      if (!apiKey) {
+        log('Admin API key required');
+        return;
+      }
+      const data = await fetchWithLogs('/reset?api_key=' + encodeURIComponent(apiKey));
+      if (data.success) {
+        log('State reset successfully');
+      }
       await refresh();
     }
 
-    // Auto-refresh every 30s
-    setInterval(refresh, 30000);
+    // Initialize on load
     window.onload = initApp;
   </script>
 </body>
