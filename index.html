@@ -3,198 +3,223 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wishy Washy Rune Lottery</title>
+  <title>🎰 Wishy Washy Rune Lottery</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: #f4f4f4;
-    }
-    h1 {
-      text-align: center;
-      color: #333;
-    }
-    .container {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 20px;
-    }
-    .box {
-      background: white;
-      border-radius: 8px;
-      padding: 20px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      min-height: 200px;
-    }
-    .box h2 {
-      margin-top: 0;
-      color: #2c3e50;
-    }
-    .box p, .box ul {
-      margin: 10px 0;
-    }
-    ul {
-      list-style: none;
-      padding: 0;
-    }
-    li {
-      padding: 5px 0;
-    }
-    .admin-controls {
-      margin-top: 20px;
-      text-align: center;
-    }
-    .admin-controls button {
-      margin: 5px;
-      padding: 10px 20px;
-      background-color: #3498db;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    .admin-controls button:hover {
-      background-color: #2980b9;
-    }
-    #logs {
-      margin-top: 20px;
-      padding: 10px;
-      background: #eee;
-      border-radius: 5px;
-      max-height: 200px;
-      overflow-y: auto;
-    }
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    h1 { text-align: center; }
+    .section { margin: 20px 0; }
+    .address { font-family: monospace; word-break: break-all; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    .buttons { display: flex; gap: 10px; margin: 20px 0; }
+    button { padding: 10px; cursor: pointer; }
+    #logs { white-space: pre-wrap; font-family: monospace; background: #f8f8f8; padding: 10px; height: 200px; overflow-y: auto; }
   </style>
 </head>
 <body>
   <h1>🎰 Wishy Washy Rune Lottery</h1>
-  <div class="container">
-    <div class="box">
-      <h2>1. Send Runes</h2>
-      <p><strong>Send WISHYWASHYMACHINE Runes to:</strong></p>
-      <p id="address">Loading...</p>
-      <p><strong>Current Pot:</strong> <span id="pot">0</span> WISHY</p>
-      <p><strong>Last Winner:</strong> <span id="last-winner">None</span></p>
-      <p><strong>Estimated Next Lottery Check:</strong> <span id="next-check">Calculating...</span></p>
-    </div>
-    <div class="box">
-      <h2>2. Confirmed Contestants (Current Game)</h2>
-      <ul id="confirmed-entries"></ul>
-    </div>
-    <div class="box">
-      <h2>3. Pending Entries (Next Game)</h2>
-      <ul id="pending-entries"></ul>
-    </div>
-    <div class="box">
-      <h2>4. Past Games</h2>
-      <ul id="past-games"></ul>
-    </div>
+
+  <div class="section">
+    <h2>1. Send Runes</h2>
+    <p>Send WISHYWASHYMACHINE Runes to:</p>
+    <p id="address" class="address">Loading...</p>
+    <p id="pot">Current Pot: 0 WISHY</p>
+    <p id="last-winner">Last Winner: None</p>
+    <p id="next-lottery">Estimated Next Lottery Check: Calculating...</p>
   </div>
-  <div class="admin-controls">
+
+  <div class="section" id="contestants-section">
+    <h2>2. Confirmed Contestants (Current Game)</h2>
+    <table id="contestants">
+      <thead>
+        <tr>
+          <th>Alias</th>
+          <th>Address</th>
+          <th>Amount (WISHY)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>3. Pending Entries (Next Game)</h2>
+    <table id="pending">
+      <thead>
+        <tr>
+          <th>Alias</th>
+          <th>Address</th>
+          <th>Amount (WISHY)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>4. Past Games</h2>
+    <table id="history">
+      <thead>
+        <tr>
+          <th>Winner</th>
+          <th>Amount (WISHY)</th>
+          <th>Date</th>
+          <th>TxID</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="buttons">
     <button onclick="init()">Init Rune Info</button>
     <button onclick="poll()">Poll for Deposits</button>
     <button onclick="check()">Check Block / Lottery</button>
     <button onclick="refresh()">Refresh Status</button>
-    <button onclick="reset()">Reset State (Admin)</button>
+    <button onclick="promptReset()">Reset State (Admin)</button>
   </div>
-  <div id="logs">Logs will appear here...</div>
+
+  <div>
+    <h2>Logs</h2>
+    <div id="logs">Logs will appear here...</div>
+  </div>
 
   <script>
-    const apiUrl = 'https://wishyroulette.onrender.com';
-    const adminApiKey = prompt('Enter Admin API Key (leave blank if not admin):') || '';
+    const apiUrl = window.location.hostname === 'localhost' ? 'http://localhost:10000' : '';
+    let lastLogTime = 0;
+
+    async function fetchWithLogs(url) {
+      const now = Date.now();
+      if (now - lastLogTime > 1000) {
+        log(`Fetching ${url}`);
+        lastLogTime = now;
+      }
+      const response = await fetch(url);
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        log(`Error fetching ${url}: ${data.error || response.statusText}`);
+      }
+      return data;
+    }
 
     function log(message) {
       const logs = document.getElementById('logs');
-      logs.innerHTML += `<p>${new Date().toLocaleString()}: ${message}</p>`;
+      logs.innerHTML += `${new Date().toLocaleTimeString()}: ${message}\n`;
       logs.scrollTop = logs.scrollHeight;
     }
 
-    async function fetchWithError(url, options = {}) {
-      try {
-        const res = await fetch(url, options);
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-        return await res.json();
-      } catch (e) {
-        log(`Error: ${e.message}`);
-        throw e;
-      }
-    }
-
     async function init() {
-      log('Initializing rune info...');
-      const data = await fetchWithError(`${apiUrl}/init`);
-      log(data.success ? 'Initialization successful' : `Init failed: ${data.error}`);
+      log('Initializing...');
+      const data = await fetchWithLogs(`${apiUrl}/init`);
+      if (data.success) {
+        log(`Rune ID: ${data.runeId}, Decimals: ${data.decimals}`);
+      }
+      await refresh();
     }
 
     async function poll() {
       log('Polling for deposits...');
-      const data = await fetchWithError(`${apiUrl}/poll`);
-      log(data.success ? `Polled: ${data.newContributions} new contributions` : `Poll failed: ${data.error}`);
+      const data = await fetchWithLogs(`${apiUrl}/poll`);
+      if (data.success) {
+        log(`New contributions: ${data.newContributions}, New withdrawals: ${data.newWithdrawals}`);
+      }
+      await refresh();
     }
 
     async function check() {
-      log('Checking block for lottery...');
-      const data = await fetchWithError(`${apiUrl}/check?api_key=${adminApiKey}`);
-      log(data.success ? (data.winner ? `Winner: ${data.winner}` : data.message) : `Check failed: ${data.error}`);
+      log('Checking block / lottery...');
+      const apiKey = prompt('Enter admin API key:');
+      if (!apiKey) {
+        log('Admin API key required');
+        return;
+      }
+      const data = await fetchWithLogs(`${apiUrl}/check?api_key=${encodeURIComponent(apiKey)}`);
+      if (data.success && data.winner) {
+        log(`Winner: ${data.winner}`);
+      } else if (data.success) {
+        log(data.message || 'No action taken');
+      }
+      await refresh();
     }
 
     async function refresh() {
       log('Refreshing status...');
-      const data = await fetchWithError(`${apiUrl}/status`);
-      if (data.success === false) {
-        log(`Status fetch failed: ${data.error}`);
+      const status = await fetchWithLogs(`${apiUrl}/status`);
+      if (status.success) {
+        document.getElementById('address').textContent = status.address;
+        document.getElementById('pot').textContent = `Current Pot: ${status.pot} WISHY`;
+        document.getElementById('last-winner').textContent = `Last Winner: ${status.lastWinner || 'None'}`;
+        updateTable('contestants', status.contributors, ['address', 'amount']);
+        updateTable('pending', status.pendingContributors, ['alias', 'sender', 'amount', 'status']);
+        updateContestantsSection(status.hasOpenGame);
+      }
+      const history = await fetchWithLogs(`${apiUrl}/history`);
+      if (history.success) {
+        updateTable('history', history.games, ['winner', 'amount', 'timestamp', 'txid'], true);
+      }
+      const blockTime = await fetchWithLogs(`${apiUrl}/last-block-time`);
+      if (blockTime.success) {
+        const nextTime = new Date((blockTime.timestamp + 600) * 1000).toLocaleString();
+        document.getElementById('next-lottery').textContent = `Estimated Next Lottery Check: ${nextTime}`;
+      }
+    }
+
+    function updateContestantsSection(hasOpenGame) {
+      const section = document.getElementById('contestants-section');
+      section.style.display = hasOpenGame ? 'block' : 'none';
+    }
+
+    function updateTable(tableId, data, fields, formatTime = false) {
+      const tbody = document.getElementById(tableId).getElementsByTagName('tbody')[0];
+      tbody.innerHTML = '';
+      const entries = Object.values(data);
+      if (entries.length === 0) {
+        const row = tbody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = fields.length;
+        cell.textContent = 'No data';
         return;
       }
-      document.getElementById('address').textContent = data.address || 'Unknown';
-      document.getElementById('pot').textContent = data.pot || '0';
-      document.getElementById('last-winner').textContent = data.lastWinner || 'None';
-
-      const confirmedList = document.getElementById('confirmed-entries');
-      confirmedList.innerHTML = '';
-      for (const [addr, amount] of Object.entries(data.contributors || {})) {
-        const alias = btoa(addr + amount).slice(0, 6).toUpperCase();
-        const li = document.createElement('li');
-        li.textContent = `${alias}: ${amount} WISHY (Address: ${addr.slice(0, 8)}...)`;
-        confirmedList.appendChild(li);
-      }
-
-      const pendingList = document.getElementById('pending-entries');
-      pendingList.innerHTML = '';
-      for (const txid in data.pendingContributors || {}) {
-        const { sender, amount, alias } = data.pendingContributors[txid];
-        const li = document.createElement('li');
-        li.textContent = `${alias}: ${amount} WISHY (Address: ${sender.slice(0, 8)}..., TxID: ${txid.slice(0, 8)}...)`;
-        pendingList.appendChild(li);
-      }
-
-      const lastBlockTime = await fetchWithError(`${apiUrl}/last-block-time`);
-      if (lastBlockTime.success) {
-        const nextCheck = new Date(lastBlockTime.timestamp * 1000 + 10 * 60 * 1000);
-        document.getElementById('next-check').textContent = nextCheck.toLocaleString();
-      }
-
-      const history = await fetchWithError(`${apiUrl}/history`);
-      const pastGamesList = document.getElementById('past-games');
-      pastGamesList.innerHTML = '';
-      if (history.success && history.games) {
-        history.games.forEach(game => {
-          const li = document.createElement('li');
-          li.textContent = `Winner: ${game.winner.slice(0, 8)}..., Amount: ${game.amount} WISHY, Time: ${new Date(game.timestamp).toLocaleString()}`;
-          pastGamesList.appendChild(li);
+      entries.forEach(item => {
+        const row = tbody.insertRow();
+        fields.forEach(field => {
+          const cell = row.insertCell();
+          if (field === 'timestamp' && formatTime) {
+            cell.textContent = new Date(item[field]).toLocaleString();
+          } else if (field === 'txid' && item[field]) {
+            const a = document.createElement('a');
+            a.href = `https://mempool.space/${networkType === 'testnet' ? 'testnet/' : ''}tx/${item[field]}`;
+            a.textContent = item[field].slice(0, 8) + '...';
+            a.target = '_blank';
+            cell.appendChild(a);
+          } else if (field === 'address' || field === 'sender' || field === 'winner') {
+            cell.textContent = item[field].slice(0, 8) + '...';
+            cell.title = item[field];
+          } else {
+            cell.textContent = item[field] || '';
+          }
         });
+      });
+    }
+
+    async function promptReset() {
+      const apiKey = prompt('Enter admin API key:');
+      if (!apiKey) {
+        log('Admin API key required');
+        return;
       }
-    }
-
-    async function reset() {
       log('Resetting state...');
-      const data = await fetchWithError(`${apiUrl}/reset?api_key=${adminApiKey}`);
-      log(data.success ? 'State reset successful' : `Reset failed: ${data.error}`);
+      const data = await fetchWithLogs(`${apiUrl}/reset?api_key=${encodeURIComponent(apiKey)}`);
+      if (data.success) {
+        log('State reset successfully');
+      }
+      await refresh();
     }
 
-    setInterval(refresh, 10000);
-    refresh();
+    // Initialize on load
+    window.onload = init;
   </script>
 </body>
 </html>
