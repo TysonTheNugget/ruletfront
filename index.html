@@ -7,14 +7,16 @@
   <style>
     body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
     h1 { text-align: center; }
-    .section { margin: 20px 0; }
+    .section { margin: 20px 0; padding: 15px; border: 2px solid #333; border-radius: 10px; background: #f9f9f9; }
     .address { font-family: monospace; word-break: break-all; }
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background-color: #f2f2f2; }
+    th { background-color: #e0e0e0; }
     .buttons { display: flex; gap: 10px; margin: 20px 0; }
-    button { padding: 10px; cursor: pointer; }
-    #logs { white-space: pre-wrap; font-family: monospace; background: #f8f8f8; padding: 10px; height: 200px; overflow-y: auto; }
+    button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+    button:hover { background: #0056b3; }
+    #logs { white-space: pre-wrap; font-family: monospace; background: #f8f8f8; padding: 10px; height: 200px; overflow-y: auto; border: 1px solid #ddd; }
+    .error { color: red; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -27,9 +29,10 @@
     <p id="pot">Current Pot: 0 WISHY</p>
     <p id="last-winner">Last Winner: None</p>
     <p id="next-lottery">Estimated Next Lottery Check: Calculating...</p>
+    <p id="balance-error" class="error" style="display: none;"></p>
   </div>
 
-  <div class="section" id="contestants-section">
+  <div class="section" id="contestants-section" style="display: none;">
     <h2>2. Confirmed Contestants (Current Game)</h2>
     <table id="contestants">
       <thead>
@@ -81,13 +84,13 @@
     <button onclick="promptReset()">Reset State (Admin)</button>
   </div>
 
-  <div>
+  <div class="section">
     <h2>Logs</h2>
     <div id="logs">Logs will appear here...</div>
   </div>
 
   <script>
-    const apiUrl = window.location.hostname === 'localhost' ? 'http://localhost:10000' : '';
+    const apiUrl = 'https://wishyroulette.onrender.com';
     let lastLogTime = 0;
 
     async function fetchWithLogs(url) {
@@ -96,12 +99,17 @@
         log(`Fetching ${url}`);
         lastLogTime = now;
       }
-      const response = await fetch(url);
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        log(`Error fetching ${url}: ${data.error || response.statusText}`);
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          log(`Error fetching ${url}: ${data.error || response.statusText}`);
+        }
+        return data;
+      } catch (e) {
+        log(`Fetch error for ${url}: ${e.message}`);
+        return { success: false, error: e.message };
       }
-      return data;
     }
 
     function log(message) {
@@ -123,7 +131,7 @@
       log('Polling for deposits...');
       const data = await fetchWithLogs(`${apiUrl}/poll`);
       if (data.success) {
-        log(`New contributions: ${data.newContributions}, New withdrawals: ${data.newWithdrawals}`);
+        log(`Poll completed`);
       }
       await refresh();
     }
@@ -151,6 +159,8 @@
         document.getElementById('address').textContent = status.address;
         document.getElementById('pot').textContent = `Current Pot: ${status.pot} WISHY`;
         document.getElementById('last-winner').textContent = `Last Winner: ${status.lastWinner || 'None'}`;
+        document.getElementById('balance-error').style.display = status.balanceError ? 'block' : 'none';
+        document.getElementById('balance-error').textContent = status.balanceError || '';
         updateTable('contestants', status.contributors, ['address', 'amount']);
         updateTable('pending', status.pendingContributors, ['alias', 'sender', 'amount', 'status']);
         updateContestantsSection(status.hasOpenGame);
@@ -218,7 +228,6 @@
       await refresh();
     }
 
-    // Initialize on load
     window.onload = init;
   </script>
 </body>
